@@ -74,11 +74,11 @@ class Graphtec:
                 channel_reading = row[channel_ind][reading_index]   # Read the data of channel for this row
                 
                 # Value formatting
-                if channel_reading == '-------' or channel_reading == '+++++++':
-                    channel_reading = "NaN"                                 # NaN for false values
-                else:
-                    channel_reading = float(channel_reading.replace(' ',''))# Float for other values, remove spaces in order to have +/-   
-
+                try:
+                    channel_reading = float(channel_reading.replace(' ', ''))  # Float for other values, remove spaces in order to have +/-
+                except ValueError:  # ValueError: could not convert string to float: 'BURNOUT'
+                    channel_reading = "NaN"
+                
                 channel_readings.append(channel_reading)            
                 
             df[column_name] = channel_readings          # Add a new column with data
