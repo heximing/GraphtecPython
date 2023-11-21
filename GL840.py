@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup
-from requests import get
+import requests
 import pandas as pd
 import pyvisa
 import time
@@ -13,6 +13,7 @@ class Graphtec:
         self._address = address  # string representation of the USB/TCP/IP device to connect to
         self._name_string = name_string
         # self.data = []  # Holds measurement data
+        # self._time_delta = time.perf_counter()
         self.connected = self.connect()
         """
         Can be setup on Graphtec with "Menu > I/F > IP ADDRESS" (change with buttons)
@@ -81,7 +82,7 @@ class Graphtec:
         address_channel_data = f"http://{self._address}/digital.cgi?chgrp=13"
 
         # Get http response
-        response = get(address_channel_data)                        # Get response from the channel data page
+        response = requests.get(address_channel_data)                        # Get response from the channel data page
 
         data_list = []
         data_dict = {}
@@ -102,7 +103,7 @@ class Graphtec:
 
             # Append the data to the list
             data_list.append(channels_data)
-            time.sleep(0.1)
+            # time.sleep(0.1)
         """
         [
         [['CH 1', '+ 21.48', 'degC'], ['CH 2', '+ 21.76', 'degC']], ...  # depending on how many CH the device has
@@ -114,7 +115,7 @@ class Graphtec:
         return data_list
 
     def add_channel_data_to_df(self, data_list: list | None = None) -> pd.DataFrame | None:
-        """Post processing method to format data_list into a Pandas DataFrame"""
+        """Post-processing method to format data_list into a Pandas DataFrame"""
 
         if data_list is None or data_list == [] or len(data_list) == 0:
             print(time.ctime(), "; no data input; skipped...")
@@ -172,18 +173,48 @@ class Graphtec:
                 data_dict[str(a_ch[0])] = _data
             return data_dict
 
+    def get_dict(self, num: int = 2, temp_ch: str | list[str | None] = None) -> dict | None:
+        _report_dict = {}
+        _data_dict = {}
+        if self.connected and len(temp_ch) > 0:
+            try:
+                _data_dict = self.add_channel_data_to_dict(self.append_graphtec_readings(num=num))
+            except (requests.exceptions.ChunkedEncodingError, requests.exceptions.ConnectTimeout, TimeoutError) as msg:
+                print(time.ctime(), msg, "; get_dict() @ GL840.py; set self.connected = False; keep going...")
+                self.connected = False
+
+        if temp_ch == "all":
+            # print(abs(time.perf_counter() - self._time_delta) * 1000, "ms; GL840.py/get_dict()/_data_dict =", _data_dict)
+            # self._time_delta = time.perf_counter()
+            return _data_dict
+        else:
+            for ch in temp_ch:
+                try:
+                    _report_dict[ch] = _data_dict[ch]
+                except KeyError:
+                    _report_dict[ch] = None
+            # print(abs(time.perf_counter() - self._time_delta) * 0000, "ms; GL840.py/get_dict()/_report_dict =", _report_dict)
+            # self._time_delta = time.perf_counter()
+            return _report_dict
+
     def close(self):
-        self._my_instrument.close()
+        self._my_instrument.close()  # !!! Attention !!! Check self.connected before closing; otherwise TypeError.
         self._my_instrument = None  # PyVISA instance
         print("self._my_instrument.close() in GL840.py")
 
 
 if __name__ == "__main__":
 
-    graphtec = Graphtec("192.168.0.1")
-    get_list = graphtec.append_graphtec_readings(num=1)
-    print(time.ctime(), type(get_list), get_list)
-    # get_dict = graphtec.add_channel_data_to_dict(graphtec.append_graphtec_readings(num=1))
-    get_dict = graphtec.add_channel_data_to_dict(get_list)
-    print(time.ctime(), type(get_dict), get_dict)
-    graphtec.close()
+    graphtec = Graphtec(address="192.168.0.1")
+
+    for _ in range(9):
+        graphtec.get_dict(num=1, temp_ch="all")
+
+    if graphtec.connected:
+        # get_list = graphtec.append_graphtec_readings(num=1)
+        # print(time.ctime(), type(get_list), get_list)
+        #
+        # # get_dict = graphtec.add_channel_data_to_dict(graphtec.append_graphtec_readings(num=1))
+        # get_dict = graphtec.add_channel_data_to_dict(get_list)
+        # print(time.ctime(), type(get_dict), get_dict)
+        graphtec.close()
